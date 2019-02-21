@@ -1,6 +1,8 @@
 import socket
 import sys
 import traceback
+import mimetypes
+import os
 
 def response_ok(body=b"This is a minimal response", mimetype=b"text/plain"):
     """
@@ -18,22 +20,17 @@ def response_ok(body=b"This is a minimal response", mimetype=b"text/plain"):
         <html><h1>Welcome:</h1></html>\r\n
         '''
     """
+    return b"HTTP/1.1 200 OK\r\nContent-Type: " + mimetype + b"\r\n\r\n" + body
 
-    # TODO: Implement response_ok
-    return b""
 
 def response_method_not_allowed():
     """Returns a 405 Method Not Allowed response"""
-
-    # TODO: Implement response_method_not_allowed
-    return b""
+    return b"HTTP/1.1 405 Method Not Allowed\r\n"
 
 
 def response_not_found():
     """Returns a 404 Not Found response"""
-
-    # TODO: Implement response_not_found
-    return b""
+    return b"HTTP/1.1 404 Not Found\r\n"
 
 
 def parse_request(request):
@@ -43,9 +40,14 @@ def parse_request(request):
     This server only handles GET requests, so this method shall raise a
     NotImplementedError if the method of the request is not GET.
     """
+    lines = request.splitlines()
+    method, path, version = lines[0].split(" ")
 
-    # TODO: implement parse_request
-    return ""
+    if method != 'GET':
+        print(f'invalid method {method}')
+        raise NotImplementedError()
+
+    return path
 
 def response_path(path):
     """
@@ -74,20 +76,24 @@ def response_path(path):
         response_path('/a_page_that_doesnt_exist.html') -> Raises a NameError
 
     """
+    root_path = os.path.dirname(os.path.abspath(__file__)) + "/webroot"
+    tgt_path = root_path + path
 
-    # TODO: Raise a NameError if the requested content is not present
-    # under webroot.
+    if os.path.isdir(tgt_path):
+        content = "\r\n".join(os.listdir(tgt_path))
+        content = content.encode()
+        mime_type = b'text/plain'
+    else:
+        if os.path.isfile(tgt_path):
+            if 'make_time.py' in path:
+                mime_type = b'text/plain'
+            else:
+                mime_type = mimetypes.guess_type(tgt_path)[0].encode()
 
-    # TODO: Fill in the appropriate content and mime_type give the path.
-    # See the assignment guidelines for help on "mapping mime-types", though
-    # you might need to create a special case for handling make_time.py
-    #
-    # If the path is "make_time.py", then you may OPTIONALLY return the
-    # result of executing `make_time.py`. But you need only return the
-    # CONTENTS of `make_time.py`.
-    
-    content = b"not implemented"
-    mime_type = b"not implemented"
+            with open(tgt_path, 'rb') as f:
+                content = f.read()
+        else:
+            raise NameError
 
     return content, mime_type
 
@@ -114,30 +120,28 @@ def server(log_buffer=sys.stderr):
 
                     if '\r\n\r\n' in request:
                         break
-		
+
 
                 print("Request received:\n{}\n\n".format(request))
 
-                # TODO: Use parse_request to retrieve the path from the request.
+                response = ''
 
-                # TODO: Use response_path to retrieve the content and the mimetype,
-                # based on the request path.
+                try:
+                    request_path = parse_request(request)
 
-                # TODO; If parse_request raised a NotImplementedError, then let
-                # response be a method_not_allowed response. If response_path raised
-                # a NameError, then let response be a not_found response. Else,
-                # use the content and mimetype from response_path to build a 
-                # response_ok.
-                response = response_ok(
-                    body=b"Welcome to my web server",
-                    mimetype=b"text/plain"
-                )
+                    try:
+                        (c, m) = response_path(request_path)
+                        response = response_ok(body=c, mimetype=m)
+                    except NameError:
+                        response = response_not_found()
+                except NotImplementedError:
+                    response = response_method_not_allowed()
 
                 conn.sendall(response)
             except:
                 traceback.print_exc()
             finally:
-                conn.close() 
+                conn.close()
 
     except KeyboardInterrupt:
         sock.close()
